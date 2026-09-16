@@ -34,6 +34,8 @@ python3 -m http.server 8000 --directory _site
 - `.github/workflows/pages.yml`：main 推送后验证并发布 GitHub Pages。
 - `AGENTS.md`：定时任务和 AI 的完整操作流程。
 
+正文支持 HTTP(S) Markdown 链接，链接文字可以是提交哈希、仓库名加哈希或中文说明，例如 `[项目说明](https://example.com/docs)`。反引号内的链接示例保持为代码。测试会逐篇检查历史日报中的显式链接确实渲染为可点击链接，而不只是检查 URL 字符串存在。
+
 ## 定时任务
 
 调度在本地 Codex 中管理，名称为「MM Trading Bot 每日变动日志」，每天 20:00（Asia/Shanghai）。本机需要开机、Codex 可执行任务，并能访问 GitHub；它不是服务器常驻任务。任务运行时会读取本仓库的最新说明。修改脚本不改变调度时间，改时间需要更新 Codex 自动化。

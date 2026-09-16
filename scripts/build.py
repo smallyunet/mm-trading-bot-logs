@@ -18,9 +18,10 @@ LOGS = ROOT / "logs"
 OUTPUT = ROOT / "_site"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ORDERED_RE = re.compile(r"^\s*\d+[.、]\s*(.+)$")
-COMMIT_LINK_RE = re.compile(
-    r"\[([0-9a-f]{7,8})\]\((https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commit/[0-9a-f]{7,40})\)"
-)
+# Explicit links may have descriptive labels, not just a short commit hash.
+# Only HTTP(S) destinations become anchors; raw HTML remains escaped.
+LINK_RE = re.compile(r"\[([^\[\]\n]+)\]\((https?://[^\s<>\"()]+)\)")
+INLINE_RE = re.compile(r"`([^`]+)`|" + LINK_RE.pattern)
 PROJECT_COMMIT_RE = re.compile(
     r"(?<=[（；])(?P<project>eth-wallet-generator|trading-bot-dashboard|trading-bot)"
     r"：(?P<references>[^；）]+)"
@@ -70,7 +71,7 @@ def add_direct_commit_links(text: str) -> str:
 
     chunks: list[str] = []
     cursor = 0
-    for existing_link in COMMIT_LINK_RE.finditer(text):
+    for existing_link in INLINE_RE.finditer(text):
         chunks.append(PROJECT_COMMIT_RE.sub(link_project_references, text[cursor:existing_link.start()]))
         chunks.append(existing_link.group(0))
         cursor = existing_link.end()
@@ -82,15 +83,17 @@ def inline(text: str) -> str:
     text = add_direct_commit_links(text)
     chunks: list[str] = []
     cursor = 0
-    for match in COMMIT_LINK_RE.finditer(text):
+    for match in INLINE_RE.finditer(text):
         chunks.append(html.escape(text[cursor:match.start()], quote=False))
-        label = html.escape(match.group(1))
-        url = html.escape(match.group(2), quote=True)
-        chunks.append(f'<a href="{url}" rel="noreferrer">{label}</a>')
+        if match.group(1) is not None:
+            chunks.append(f'<code>{html.escape(match.group(1))}</code>')
+        else:
+            label = html.escape(match.group(2))
+            url = html.escape(match.group(3), quote=True)
+            chunks.append(f'<a href="{url}" rel="noreferrer">{label}</a>')
         cursor = match.end()
     chunks.append(html.escape(text[cursor:], quote=False))
-    escaped = "".join(chunks)
-    return re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    return "".join(chunks)
 
 
 def render_body(lines: tuple[str, ...]) -> str:

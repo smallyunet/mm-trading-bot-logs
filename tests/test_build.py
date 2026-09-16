@@ -1,10 +1,26 @@
 import sys
 import unittest
+import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from build import inline, render_body
+from build import inline, render_body, load_reports
+
+
+class ParsedLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+        self.text = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a':
+            self.links.append(dict(attrs)['href'])
+
+    def handle_data(self, data):
+        self.text.append(data)
 
 
 class RenderBodyTests(unittest.TestCase):
@@ -46,6 +62,31 @@ class RenderBodyTests(unittest.TestCase):
 
     def test_hash_outside_project_reference_stays_plain(self):
         self.assertEqual(inline("版本 abcdef12"), "版本 abcdef12")
+
+    def test_descriptive_labels_and_multiple_links(self):
+        source = '( [trading-bot abcdef12](https://github.com/Virae-Labs/trading-bot/commit/abcdef12)、[使用说明](https://example.com/docs?a=1&b=2) )'
+        parsed = ParsedLinks()
+        parsed.feed(inline(source))
+        self.assertEqual(parsed.links, ['https://github.com/Virae-Labs/trading-bot/commit/abcdef12', 'https://example.com/docs?a=1&b=2'])
+        self.assertEqual(''.join(parsed.text), '( trading-bot abcdef12、使用说明 )')
+
+    def test_code_and_unsafe_links_remain_inert(self):
+        rendered = inline('`[example](https://example.com)` [bad](javascript:alert) <script>alert(1)</script>')
+        self.assertIn('<code>[example](https://example.com)</code>', rendered)
+        self.assertNotIn('<a ', rendered)
+        self.assertNotIn('<script>', rendered)
+        self.assertIn('&lt;script&gt;', rendered)
+
+    def test_all_archived_report_links_are_anchors(self):
+        for report in load_reports():
+            with self.subTest(date=report.day):
+                expected = re.findall(r'\]\((https?://[^\s)]+)\)', '\n'.join(report.lines))
+                parsed = ParsedLinks()
+                parsed.feed(render_body(report.lines))
+                self.assertTrue(expected)
+                for url in expected:
+                    self.assertIn(url, parsed.links)
+                self.assertNotRegex(''.join(parsed.text), r'\]\(https?://')
 
 
 if __name__ == "__main__":
